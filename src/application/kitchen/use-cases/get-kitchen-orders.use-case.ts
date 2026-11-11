@@ -1,4 +1,5 @@
-import { prisma } from '../../../infrastructure/db/prisma';
+import { PrismaClient } from '@prisma/client';
+import { prisma as defaultPrisma } from '../../../infrastructure/db/prisma';
 import { OrderStatus } from '../../../domain/ordering/enums';
 import { GetKitchenOrdersDto, getKitchenOrdersSchema } from '../dto/kitchen.dto';
 
@@ -48,13 +49,18 @@ export interface KitchenOrderCard {
 }
 
 export class GetKitchenOrdersUseCase {
+  constructor(private readonly db: PrismaClient = defaultPrisma) {}
+
   public async execute(input: GetKitchenOrdersDto): Promise<KitchenOrderCard[]> {
     const validated = getKitchenOrdersSchema.parse(input);
 
-    const orders = await prisma.order.findMany({
+    const orders = await this.db.order.findMany({
       where: {
-        status: OrderStatus.PREPARING,
         ...(validated.branchId ? { branchId: validated.branchId } : {}),
+        OR: [
+          { status: OrderStatus.PREPARING },
+          { isTabOpen: true, items: { some: { isPrepared: false } } },
+        ],
       },
       include: {
         branch: {

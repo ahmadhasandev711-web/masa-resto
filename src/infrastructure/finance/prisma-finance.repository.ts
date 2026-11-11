@@ -39,6 +39,9 @@ export class PrismaFinanceRepository implements FinanceRepository {
         branch: { select: { nameAr: true } },
         approver: { select: { fullName: true } },
         orders: {
+          where: {
+            status: { notIn: [OrderStatus.CANCELLED, OrderStatus.REJECTED] },
+          },
           select: {
             id: true,
             totalMinor: true,
@@ -303,17 +306,20 @@ export class PrismaFinanceRepository implements FinanceRepository {
         });
         const cashSalesMinor = cashPayments._sum.amountMinor ?? 0;
 
-        // 2. Calculate Movements (Cash In / Drop)
+        // 2. Calculate Movements (Cash In / Drop / Refund)
         const movements = await client.cashShiftMovement.findMany({
           where: { cashShiftId: shift.id },
         });
         let cashInMinor = 0;
         let cashDropMinor = 0;
+        let cashRefundMinor = 0;
         for (const m of movements) {
           if (m.type === CashMovementType.CASH_IN) {
             cashInMinor += m.amountMinor;
           } else if (m.type === CashMovementType.CASH_DROP) {
             cashDropMinor += m.amountMinor;
+          } else if (m.type === CashMovementType.CASH_REFUND) {
+            cashRefundMinor += m.amountMinor;
           }
         }
 
@@ -331,6 +337,7 @@ export class PrismaFinanceRepository implements FinanceRepository {
           cashInTotal: Money.fromMinor(cashInMinor, currency),
           cashDropTotal: Money.fromMinor(cashDropMinor, currency),
           registerExpensesTotal: Money.fromMinor(registerExpensesMinor, currency),
+          cashRefundsTotal: Money.fromMinor(cashRefundMinor, currency),
         });
 
         // 5. Analyze Variance
@@ -383,6 +390,12 @@ export class PrismaFinanceRepository implements FinanceRepository {
         }
         if (shift.status === CashShiftStatus.OPEN) {
           throw new ConflictError('يجب إغلاق الوردية قبل اعتمادها وتدقيقها');
+        }
+        if (shift.status === CashShiftStatus.AUDITED) {
+          throw new ConflictError('الوردية معتمدة ومدققة بالفعل');
+        }
+        if (shift.cashierId === params.approverId) {
+          throw new ValidationError('لا يمكن للكاشير تدقيق واعتماد ورديته بنفسه (فصل المهام)');
         }
 
         const updatedVarianceReason = params.notes
@@ -474,6 +487,7 @@ export class PrismaFinanceRepository implements FinanceRepository {
     receiptNumber?: string;
     spentById: string;
     cashShiftId?: string;
+    approvedById?: string;
   }): Promise<ExpenseListItem> {
     return prisma.$transaction(
       async (client) => {
@@ -489,6 +503,9 @@ export class PrismaFinanceRepository implements FinanceRepository {
             }
             if (shift.status !== CashShiftStatus.OPEN) {
               throw new ConflictError('الوردية المحددة للصرف مغلقة');
+            }
+            if (shift.cashierId !== params.spentById && !params.approvedById) {
+              throw new ValidationError('الصرف من وردية كاشير آخر يتطلب اعتماد المدير المالي');
             }
             assignedShiftId = shift.id;
           } else {
@@ -520,6 +537,7 @@ export class PrismaFinanceRepository implements FinanceRepository {
             description: params.description,
             receiptNumber: params.receiptNumber || null,
             spentById: params.spentById,
+            approvedById: params.approvedById || null,
             cashShiftId: assignedShiftId,
           },
           include: {

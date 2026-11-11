@@ -1,9 +1,12 @@
-import { prisma } from '../../../infrastructure/db/prisma';
+import { Prisma, PrismaClient } from '@prisma/client';
+import { prisma as defaultPrisma } from '../../../infrastructure/db/prisma';
 import { NotFoundError, ValidationError } from '../../../domain/shared/errors/domain-error';
 import { TableStatus } from '../../../domain/tables/enums';
 import { TransferTableDto, transferTableSchema } from '../dto/table.dto';
 
 export class TransferTableUseCase {
+  constructor(private readonly db: PrismaClient = defaultPrisma) {}
+
   public async execute(input: TransferTableDto) {
     const validated = transferTableSchema.parse(input);
 
@@ -11,34 +14,40 @@ export class TransferTableUseCase {
       throw new ValidationError('لا يمكن نقل الطلب إلى نفس الطاولة الحالية');
     }
 
-    const [fromTable, toTable] = await Promise.all([
-      prisma.diningTable.findUnique({ where: { id: validated.fromTableId } }),
-      prisma.diningTable.findUnique({ where: { id: validated.toTableId } }),
-    ]);
+    return this.db.$transaction(async (tx) => {
+      // 1. Deadlock-free locking: Sort IDs lexicographically to guarantee consistent locking order
+      const [firstId, secondId] = [validated.fromTableId, validated.toTableId].sort();
 
-    if (!fromTable || !fromTable.isActive) {
-      throw new NotFoundError('طاولة المصدر', validated.fromTableId);
-    }
+      await tx.$queryRaw(
+        Prisma.sql`SELECT id, status, active_order_id, branch_id FROM dining_tables WHERE id IN (${firstId}, ${secondId}) ORDER BY id FOR UPDATE`
+      );
 
-    if (!toTable || !toTable.isActive) {
-      throw new NotFoundError('طاولة الوجهة', validated.toTableId);
-    }
+      const [fromTable, toTable] = await Promise.all([
+        tx.diningTable.findUnique({ where: { id: validated.fromTableId } }),
+        tx.diningTable.findUnique({ where: { id: validated.toTableId } }),
+      ]);
 
-    if (fromTable.branchId !== toTable.branchId) {
-      throw new ValidationError('لا يمكن نقل الطاولات عبر فروع مختلفة');
-    }
+      if (!fromTable || !fromTable.isActive) {
+        throw new NotFoundError('طاولة المصدر', validated.fromTableId);
+      }
 
-    if (!fromTable.activeOrderId) {
-      throw new ValidationError(`الطاولة ${fromTable.tableNumber} لا تحتوي على أي طلب مفتوح لنقله`);
-    }
+      if (!toTable || !toTable.isActive) {
+        throw new NotFoundError('طاولة الوجهة', validated.toTableId);
+      }
 
-    if (toTable.status !== TableStatus.AVAILABLE) {
-      throw new ValidationError(`الطاولة المستهدفة ${toTable.tableNumber} مشغولة بالفعل أو غير متاحة`);
-    }
+      if (fromTable.branchId !== toTable.branchId) {
+        throw new ValidationError('لا يمكن نقل الطاولات عبر فروع مختلفة');
+      }
 
-    // Atomic Transfer Transaction
-    return prisma.$transaction(async (tx) => {
-      // 1. Update Order's table pointer
+      if (!fromTable.activeOrderId) {
+        throw new ValidationError(`الطاولة ${fromTable.tableNumber} لا تحتوي على أي طلب مفتوح لنقله`);
+      }
+
+      if (toTable.status !== TableStatus.AVAILABLE || toTable.activeOrderId !== null) {
+        throw new ValidationError(`الطاولة المستهدفة ${toTable.tableNumber} مشغولة بالفعل أو غير متاحة`);
+      }
+
+      // 2. Update Order's table pointer
       const updatedOrder = await tx.order.update({
         where: { id: fromTable.activeOrderId! },
         data: {
@@ -47,7 +56,7 @@ export class TransferTableUseCase {
         },
       });
 
-      // 2. Free source table
+      // 3. Free source table
       const freedFromTable = await tx.diningTable.update({
         where: { id: fromTable.id },
         data: {
@@ -56,13 +65,21 @@ export class TransferTableUseCase {
         },
       });
 
-      // 3. Occupy destination table with previous status (OCCUPIED or BILL_PRINTED)
-      const occupiedToTable = await tx.diningTable.update({
-        where: { id: toTable.id },
+      // 4. Occupy destination table atomically (OCCUPIED or BILL_PRINTED)
+      const updateToResult = await tx.diningTable.updateMany({
+        where: { id: toTable.id, status: TableStatus.AVAILABLE, activeOrderId: null },
         data: {
           status: fromTable.status,
           activeOrderId: updatedOrder.id,
         },
+      });
+
+      if (updateToResult.count === 0) {
+        throw new ValidationError(`الطاولة المستهدفة ${toTable.tableNumber} تم شغلها من محطة أخرى`);
+      }
+
+      const occupiedToTable = await tx.diningTable.findUniqueOrThrow({
+        where: { id: toTable.id },
       });
 
       return {

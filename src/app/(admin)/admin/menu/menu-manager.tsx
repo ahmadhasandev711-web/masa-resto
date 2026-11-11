@@ -69,6 +69,7 @@ export function MenuManager({ categories: initialCategories, products: initialPr
 
   async function saveProduct(formData: FormData) {
     setPending(true); setError('');
+    const sizeIds = formData.getAll('sizeId').map(String);
     const sizeNamesAr = formData.getAll('sizeNameAr').map(String);
     const sizeNamesEn = formData.getAll('sizeNameEn').map(String);
     const sizePrices = formData.getAll('sizePrice').map(String);
@@ -79,7 +80,12 @@ export function MenuManager({ categories: initialCategories, products: initialPr
         nameEn: String(formData.get('nameEn') ?? ''), description: String(formData.get('description') ?? ''),
         imageUrl: String(formData.get('imageUrl') ?? ''),
         isFeatured: formData.get('isFeatured') === 'on',
-        sizes: sizeNamesAr.map((nameAr, index) => ({ nameAr, nameEn: sizeNamesEn[index] ?? '', price: sizePrices[index] ?? '' })),
+        sizes: sizeNamesAr.map((nameAr, index) => ({
+          id: sizeIds[index] && sizeIds[index].trim() !== '' ? sizeIds[index].trim() : undefined,
+          nameAr,
+          nameEn: sizeNamesEn[index] ?? '',
+          price: sizePrices[index] ?? '',
+        })),
         modifierGroupIds: formData.getAll('modifierGroupIds').map(String),
       });
       if (!result.success) { setError(result.error); return; }
@@ -95,6 +101,7 @@ export function MenuManager({ categories: initialCategories, products: initialPr
 
   async function saveGroup(formData: FormData) {
     setPending(true); setError('');
+    const modifierIds = formData.getAll('modifierId').map(String);
     const namesAr = formData.getAll('modifierNameAr').map(String);
     const namesEn = formData.getAll('modifierNameEn').map(String);
     const prices = formData.getAll('modifierPrice').map(String);
@@ -103,7 +110,12 @@ export function MenuManager({ categories: initialCategories, products: initialPr
         ...(editingId ? { id: editingId } : {}), nameAr: String(formData.get('nameAr') ?? ''),
         nameEn: String(formData.get('nameEn') ?? ''), minSelect: Number(formData.get('minSelect')),
         maxSelect: Number(formData.get('maxSelect')),
-        modifiers: namesAr.map((nameAr, index) => ({ nameAr, nameEn: namesEn[index] ?? '', price: prices[index] ?? '' })),
+        modifiers: namesAr.map((nameAr, index) => ({
+          id: modifierIds[index] && modifierIds[index].trim() !== '' ? modifierIds[index].trim() : undefined,
+          nameAr,
+          nameEn: namesEn[index] ?? '',
+          price: prices[index] ?? '',
+        })),
       });
       if (!result.success) { setError(result.error); return; }
       window.location.reload();

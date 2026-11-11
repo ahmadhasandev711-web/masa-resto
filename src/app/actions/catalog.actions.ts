@@ -15,6 +15,7 @@ import { SetBranchAvailabilityUseCase } from '../../application/catalog/use-case
 import { SetCatalogStatusUseCase } from '../../application/catalog/use-cases/set-catalog-status.use-case';
 import { CatalogResource } from '../../domain/catalog/enums/catalog-resource.enum';
 import { ActionResult, toActionFailure } from './action-result';
+import { assertDemoAllows } from '../../infrastructure/demo/demo-policy';
 
 export async function saveCategoryAction(input: CategoryInput): Promise<ActionResult<{ id: string }>> {
   try {

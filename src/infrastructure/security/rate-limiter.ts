@@ -1,6 +1,9 @@
 /**
  * Thread-safe In-Memory Sliding Window Rate Limiter
  * Provides high-performance throttling for brute force and scraping prevention (GR-1.2, GR-4).
+ *
+ * TODO(Redis): Migrate store to Redis / Upstash when horizontally scaling to multiple Node.js instances.
+ * In single-instance deployment, this in-memory Map provides microsecond lookups with automatic sliding expiration.
  */
 
 interface RateLimitRecord {

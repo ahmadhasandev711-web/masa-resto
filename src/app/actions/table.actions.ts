@@ -2,8 +2,11 @@
 
 import { SessionService } from '../../infrastructure/auth/session.service';
 import { BranchContextService } from '../../infrastructure/auth/branch-context.service';
+import { prisma } from '../../infrastructure/db/prisma';
+import { NotFoundError } from '../../domain/shared/errors/domain-error';
 import { PermissionCode } from '../../domain/staff/enums/permission.enum';
 import { ActionResult, toActionFailure } from './action-result';
+import { assertDemoAllows } from '../../infrastructure/demo/demo-policy';
 import {
   CreateTableSectionDto,
   UpdateTableSectionDto,
@@ -27,8 +30,6 @@ import { PrintTableBillUseCase } from '../../application/tables/use-cases/print-
 import { CloseTableTabUseCase } from '../../application/tables/use-cases/close-table-tab.use-case';
 import { SplitBillService } from '../../domain/tables/services/split-bill.service';
 import { Money } from '../../domain/shared/value-objects/money';
-import { prisma } from '../../infrastructure/db/prisma';
-import { NotFoundError } from '../../domain/shared/errors/domain-error';
 
 // 1. List Tables
 export async function listTablesAction(branchId: string): Promise<ActionResult<Awaited<ReturnType<ListTablesUseCase['execute']>>>> {
@@ -76,6 +77,7 @@ export async function updateTableSectionAction(dto: UpdateTableSectionDto): Prom
 
 export async function deleteTableSectionAction(id: string): Promise<ActionResult<Awaited<ReturnType<ManageSectionsUseCase['delete']>>>> {
   try {
+    assertDemoAllows('delete');
     await SessionService.requirePermission(PermissionCode.MANAGE_BRANCHES);
     const result = await new ManageSectionsUseCase().delete(id);
     return { success: true, data: result };
@@ -108,6 +110,7 @@ export async function updateTableAction(dto: UpdateTableDto): Promise<ActionResu
 
 export async function deleteTableAction(id: string): Promise<ActionResult<Awaited<ReturnType<ManageTablesUseCase['delete']>>>> {
   try {
+    assertDemoAllows('delete');
     await SessionService.requirePermission(PermissionCode.MANAGE_BRANCHES);
     const result = await new ManageTablesUseCase().delete(id);
     return { success: true, data: result };

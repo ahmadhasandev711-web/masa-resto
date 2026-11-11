@@ -12,9 +12,11 @@ import { SessionService } from '../../infrastructure/auth/session.service';
 import { BranchContextService } from '../../infrastructure/auth/branch-context.service';
 import { UnauthorizedError } from '../../domain/shared/errors/domain-error';
 import { PermissionCode } from '../../domain/staff/enums/permission.enum';
+import { assertDemoAllows } from '../../infrastructure/demo/demo-policy';
 
 export async function createBranchAction(formData: CreateBranchDto): Promise<ActionResult<Awaited<ReturnType<CreateBranchUseCase['execute']>>>> {
   try {
+    assertDemoAllows('branch_create');
     await SessionService.requirePermission(PermissionCode.MANAGE_BRANCHES);
     const useCase = new CreateBranchUseCase();
     const branch = await useCase.execute(formData);
@@ -30,6 +32,7 @@ export async function updateBranchAction(
   formData: UpdateBranchDto
 ): Promise<ActionResult<Awaited<ReturnType<UpdateBranchUseCase['execute']>>>> {
   try {
+    assertDemoAllows('branch_update');
     await SessionService.requirePermission(PermissionCode.MANAGE_BRANCHES);
     const useCase = new UpdateBranchUseCase();
     const branch = await useCase.execute(branchId, formData);

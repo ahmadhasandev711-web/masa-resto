@@ -22,6 +22,7 @@ export const closeCashShiftSchema = z.object({
   branchId: z.string().uuid(),
   cashShiftId: z.string().uuid(),
   closingCashMinor: z.number().int().min(0).max(2147483647),
+  clientPendingCount: z.number().int().min(0).optional(),
 });
 
 export const createPosOrderSchema = z.object({
@@ -32,6 +33,7 @@ export const createPosOrderSchema = z.object({
   customerName: z.string().trim().min(2).max(120).optional(),
   customerNotes: z.string().trim().max(500).optional(),
   discountMinor: z.number().int().min(0).max(2147483647).default(0),
+  offlineOrderNumber: z.string().trim().max(100).optional(),
   items: z.array(itemSchema).min(1).max(100),
   payments: z.array(paymentSchema).min(1).max(2),
 }).superRefine((value, ctx) => {

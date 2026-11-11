@@ -21,6 +21,7 @@ export enum PermissionCode {
   // Supply & Money
   MANAGE_INVENTORY = 'MANAGE_INVENTORY',
   MANAGE_FINANCE = 'MANAGE_FINANCE',
+  VOID_PAID_ORDER = 'VOID_PAID_ORDER',
 }
 
 export interface PermissionDefinition {
@@ -108,5 +109,11 @@ export const SYSTEM_PERMISSIONS: PermissionDefinition[] = [
     name: 'إدارة الورديات والمصروفات المالية',
     category: 'FINANCE',
     description: 'تسجيل المصروفات وإغلاق ورديات الكاشير واعتماد الفروقات',
+  },
+  {
+    code: PermissionCode.VOID_PAID_ORDER,
+    name: 'إلغاء واسترجاع الطلبات المدفوعة (Void/Refund)',
+    category: 'FINANCE',
+    description: 'إلغاء الطلبات المحصلة مع إصدار إشعار مرتجع وتسجيل الخصم النقدي للوردية',
   },
 ];

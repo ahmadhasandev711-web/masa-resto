@@ -163,6 +163,7 @@ export interface FinanceRepository {
     receiptNumber?: string;
     spentById: string;
     cashShiftId?: string;
+    approvedById?: string;
   }): Promise<ExpenseListItem>;
 
   listCategories(): Promise<ExpenseCategoryItem[]>;

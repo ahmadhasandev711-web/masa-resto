@@ -24,7 +24,7 @@ export default async function PosPage() {
   const branchId = await BranchContextService.assertBranchAccess(session, requestedBranchId);
   const scope = { branchId, cashierId: session.userId, canDiscount: RbacGuard.hasPermission(session, PermissionCode.APPLY_POS_DISCOUNT) };
   const [branch, settings, categories, receipts, tablesData] = await Promise.all([
-    prisma.branch.findUniqueOrThrow({ where: { id: branchId }, select: { id: true, nameAr: true } }),
+    prisma.branch.findUniqueOrThrow({ where: { id: branchId }, select: { id: true, nameAr: true, code: true } }),
     repository.getSettings(),
     new GetPosCatalogUseCase(repository).execute(branchId),
     repository.recentReceipts(scope),
@@ -40,6 +40,7 @@ export default async function PosPage() {
       canDiscount={scope.canDiscount}
       initialTables={tablesData.tables}
       initialSections={tablesData.sections}
+      cashierId={session.userId}
     />
   );
 }

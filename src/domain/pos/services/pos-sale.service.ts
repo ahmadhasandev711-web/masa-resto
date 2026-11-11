@@ -1,6 +1,7 @@
 import { Money } from '../../shared/value-objects/money';
 import { ConflictError, ForbiddenError, ValidationError } from '../../shared/errors/domain-error';
 import { OrderPricingService } from '../../ordering/services/order-pricing.service';
+import { OrderType } from '../../ordering/enums';
 import { PosProduct, PosReceipt, PosRequest, PosResolvedLine, PosScope, PosSelection, PosSettings, PosTotals } from '../contracts/pos.repository';
 
 export class PosSaleService {
@@ -21,15 +22,59 @@ export class PosSaleService {
       modifiers: modifiers.map((modifier) => ({ modifierId: modifier.id, nameAr: modifier.nameAr, nameEn: modifier.nameEn, priceDeltaMinor: modifier.priceDelta })) };
   }
 
-  public static price(lines: PosResolvedLine[], settings: PosSettings, discountMinor: number): PosTotals {
+  public static price(
+    lines: PosResolvedLine[],
+    settings: PosSettings,
+    discountMinor: number,
+    orderType: OrderType = OrderType.TAKEAWAY
+  ): PosTotals {
     const currency = settings.currency;
-    const items = lines.map((line) => ({ unitPrice: Money.fromMinor(line.unitPriceMinor, currency), quantity: line.quantity,
-      modifierDeltas: line.modifiers.map((modifier) => Money.fromMinor(modifier.priceDeltaMinor, currency)) }));
-    const beforeDiscount = OrderPricingService.calculate(items, Money.zero(currency), Number(settings.taxRatePercent));
-    if (discountMinor >= beforeDiscount.total.amount) throw new ValidationError('الخصم يجب أن يقل عن إجمالي الفاتورة');
-    const total = beforeDiscount.total.subtract(Money.fromMinor(discountMinor, currency));
-    if (total.amount > 2147483647) throw new ValidationError('إجمالي الطلب تجاوز الحد المالي المسموح');
-    return { subtotalMinor: beforeDiscount.subtotal.amount, taxMinor: beforeDiscount.tax.amount, discountMinor, totalMinor: total.amount };
+    const items = lines.map((line) => ({
+      unitPrice: Money.fromMinor(line.unitPriceMinor, currency),
+      quantity: line.quantity,
+      modifierDeltas: line.modifiers.map((modifier) => Money.fromMinor(modifier.priceDeltaMinor, currency)),
+    }));
+
+    const isDineIn = orderType === OrderType.DINE_IN;
+    const taxRatePercent = Number(settings.taxRatePercent ?? 14);
+    const serviceChargePercent = Number(settings.serviceChargePercent ?? 0);
+    const pricesIncludeTax = Boolean(settings.pricesIncludeTax);
+
+    const subtotalMinor = items.reduce((sum, item) => {
+      const itemUnit = item.modifierDeltas.reduce((acc, d) => acc + d.amount, item.unitPrice.amount);
+      return sum + itemUnit * item.quantity;
+    }, 0);
+
+    if (discountMinor >= subtotalMinor) {
+      throw new ValidationError('الخصم يجب أن يقل عن إجمالي الفاتورة');
+    }
+
+    if (discountMinor > 0 && settings.maxCashierDiscountPercent !== undefined) {
+      const maxDiscountMinor = Math.round((subtotalMinor * Number(settings.maxCashierDiscountPercent)) / 100);
+      if (discountMinor > maxDiscountMinor) {
+        throw new ValidationError(`نسبة الخصم تتجاوز الحد الأقصى المسموح (${settings.maxCashierDiscountPercent}%)`);
+      }
+    }
+
+    const calculated = OrderPricingService.calculateDetailed({
+      items,
+      deliveryFee: Money.zero(currency),
+      taxRatePercent,
+      discount: Money.fromMinor(discountMinor, currency),
+      isDineIn,
+      serviceChargePercent,
+      pricesIncludeTax,
+    });
+
+    if (calculated.total.amount > 2147483647) throw new ValidationError('إجمالي الطلب تجاوز الحد المالي المسموح');
+
+    return {
+      subtotalMinor: calculated.subtotal.amount,
+      taxMinor: calculated.tax.amount,
+      serviceMinor: calculated.service.amount,
+      discountMinor: calculated.discount.amount,
+      totalMinor: calculated.total.amount,
+    };
   }
 
   public static assertPayments(request: PosRequest, totals: PosTotals, currency: string): void {

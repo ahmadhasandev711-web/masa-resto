@@ -18,6 +18,7 @@ export const productSchema = z.object({
   imageUrl: z.string().trim().max(1000).optional().or(z.literal('')),
   isFeatured: z.boolean().default(false),
   sizes: z.array(z.object({
+    id: z.string().optional(),
     nameAr: z.string().trim().min(1),
     nameEn: z.string().trim().min(1),
     price: majorAmount,
@@ -32,6 +33,7 @@ export const modifierGroupSchema = z.object({
   minSelect: z.number().int().min(0),
   maxSelect: z.number().int().min(1),
   modifiers: z.array(z.object({
+    id: z.string().optional(),
     nameAr: z.string().trim().min(1),
     nameEn: z.string().trim().min(1),
     price: majorAmount,

@@ -21,11 +21,17 @@ export class SessionService {
         where: { id: claims.userId, isActive: true },
         select: {
           id: true,
+          sessionVersion: true,
           role: { select: { name: true, permissions: { select: { permission: { select: { code: true } } } } } },
           userBranches: { where: { branch: { isActive: true } }, select: { branchId: true } },
         },
       });
       if (!user) return null;
+
+      // Session revocation guard: reject stale tokens if sessionVersion was incremented
+      if (typeof claims.sessionVersion === 'number' && claims.sessionVersion !== user.sessionVersion) {
+        return null;
+      }
 
       return {
         userId: user.id,

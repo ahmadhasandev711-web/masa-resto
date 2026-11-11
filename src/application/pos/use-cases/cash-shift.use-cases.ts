@@ -16,6 +16,6 @@ export class CloseCashShiftUseCase {
   constructor(private readonly repository: PosRepository) {}
   public async execute(input: CloseCashShiftDto, cashierId: string) {
     const value = closeCashShiftSchema.parse(input);
-    return this.repository.closeShift(value.branchId, cashierId, value.cashShiftId, value.closingCashMinor);
+    return this.repository.closeShift(value.branchId, cashierId, value.cashShiftId, value.closingCashMinor, value.clientPendingCount);
   }
 }

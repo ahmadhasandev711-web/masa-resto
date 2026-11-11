@@ -1,6 +1,15 @@
 import { OrderType, PaymentMethod } from '../../ordering/enums';
 
-export interface PosSettings { nameAr: string; nameEn: string; currency: string; locale: string; taxRatePercent: string }
+export interface PosSettings {
+  nameAr: string;
+  nameEn: string;
+  currency: string;
+  locale: string;
+  taxRatePercent: string;
+  pricesIncludeTax?: boolean;
+  serviceChargePercent?: string;
+  maxCashierDiscountPercent?: string;
+}
 export interface PosSize { id: string; nameAr: string; nameEn: string; price: number }
 export interface PosModifier { id: string; nameAr: string; nameEn: string; priceDelta: number }
 export interface PosModifierGroup { id: string; nameAr: string; minSelect: number; maxSelect: number; modifiers: PosModifier[] }
@@ -16,7 +25,7 @@ export interface PosRequest {
   branchId: string; cashShiftId: string; idempotencyKey: string; type: OrderType.DINE_IN | OrderType.TAKEAWAY;
   customerName?: string; customerNotes?: string; discountMinor: number; items: PosSelection[]; payments: PosPayment[];
 }
-export interface PosTotals { subtotalMinor: number; taxMinor: number; discountMinor: number; totalMinor: number }
+export interface PosTotals { subtotalMinor: number; taxMinor: number; serviceMinor: number; discountMinor: number; totalMinor: number }
 export interface PosResolvedLine {
   productId: string; sizeId: string; productNameAr: string; productNameEn: string;
   sizeNameAr: string; sizeNameEn: string; unitPriceMinor: number; quantity: number; totalPriceMinor: number;
@@ -27,7 +36,7 @@ export interface PosReceipt extends PosTotals {
   idempotencyKey: string; type: string; customerName: string | null; customerNotes: string | null;
   createdAt: string; currency: string; locale: string; items: PosResolvedLine[]; payments: PosPayment[];
 }
-export interface PosShift { id: string; branchId: string; currency: string; openingCashMinor: number; openedAt: string }
+export interface PosShift { id: string; branchId: string; cashierId?: string; currency: string; openingCashMinor: number; openedAt: string }
 export interface PosShiftClose { expectedCashMinor: number; closingCashMinor: number; varianceMinor: number }
 export interface PosTransaction {
   lockShift(id: string, scope: PosScope): Promise<void>;
@@ -39,7 +48,7 @@ export interface PosTransaction {
 export interface PosRepository {
   transaction<T>(work: (transaction: PosTransaction) => Promise<T>): Promise<T>;
   openShift(branchId: string, cashierId: string, openingCashMinor: number): Promise<PosShift>;
-  closeShift(branchId: string, cashierId: string, shiftId: string, closingCashMinor: number): Promise<PosShiftClose>;
+  closeShift(branchId: string, cashierId: string, shiftId: string, closingCashMinor: number, clientPendingCount?: number): Promise<PosShiftClose>;
   getActiveShift(cashierId: string): Promise<PosShift | null>;
   getCatalog(branchId: string): Promise<PosCategory[]>;
   getSettings(): Promise<PosSettings>;

@@ -9,7 +9,7 @@ export interface PosSection {
 }
 
 export interface PosClientProps {
-  branch: { id: string; nameAr: string };
+  branch: { id: string; nameAr: string; code?: string };
   settings: PosSettings;
   categories: PosCategory[];
   initialShift: PosShift | null;
@@ -17,4 +17,5 @@ export interface PosClientProps {
   canDiscount: boolean;
   initialTables: TableItemView[];
   initialSections: PosSection[];
+  cashierId?: string;
 }

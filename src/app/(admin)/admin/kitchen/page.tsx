@@ -2,6 +2,7 @@ import { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { prisma } from '../../../../infrastructure/db/prisma';
 import { SessionService } from '../../../../infrastructure/auth/session.service';
+import { BranchContextService } from '../../../../infrastructure/auth/branch-context.service';
 import { PermissionCode } from '../../../../domain/staff/enums/permission.enum';
 import { GetKitchenOrdersUseCase } from '../../../../application/kitchen/use-cases/get-kitchen-orders.use-case';
 import { KitchenKdsClient } from './kitchen-kds-client';

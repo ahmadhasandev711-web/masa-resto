@@ -1,5 +1,7 @@
 import { prisma } from '../../../infrastructure/db/prisma';
-import { NotFoundError, ValidationError } from '../../../domain/shared/errors/domain-error';
+import type { PrismaClient } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import { NotFoundError, ValidationError, ForbiddenError } from '../../../domain/shared/errors/domain-error';
 import { TableStatus } from '../../../domain/tables/enums';
 import { OrderStatus, PaymentStatus } from '../../../domain/ordering/enums';
 import { InventoryMovementType } from '../../../domain/inventory/enums';
@@ -7,13 +9,15 @@ import { OrderInventoryDeductionService, PrismaTransactionClient } from '../../.
 import { CloseTableTabDto, closeTableTabSchema } from '../dto/table.dto';
 
 export class CloseTableTabUseCase {
+  constructor(private readonly db: PrismaClient = prisma) {}
+
   public async execute(input: CloseTableTabDto) {
     const validated = closeTableTabSchema.parse(input);
 
     const [table, order, shift] = await Promise.all([
-      prisma.diningTable.findUnique({ where: { id: validated.tableId } }),
-      prisma.order.findUnique({ where: { id: validated.orderId } }),
-      prisma.cashShift.findUnique({ where: { id: validated.cashShiftId } }),
+      this.db.diningTable.findUnique({ where: { id: validated.tableId } }),
+      this.db.order.findUnique({ where: { id: validated.orderId } }),
+      this.db.cashShift.findUnique({ where: { id: validated.cashShiftId } }),
     ]);
 
     if (!table || !table.isActive) {
@@ -32,6 +36,14 @@ export class CloseTableTabUseCase {
       throw new ValidationError('وردية الكاشير غير مفتوحة لاستلام المدفوعات');
     }
 
+    if (validated.cashierId && shift.cashierId !== validated.cashierId) {
+      throw new ForbiddenError('لا يمكن تحصيل الفاتورة على وردية كاشير آخر');
+    }
+
+    if (shift.branchId !== table.branchId) {
+      throw new ValidationError('الوردية لا تتبع نفس فرع الطاولة');
+    }
+
     // 1. Verify payments coverage
     const orderTotal = order.totalMinor;
 
@@ -48,7 +60,13 @@ export class CloseTableTabUseCase {
     }
 
     // 2. Atomic Settle Transaction (GR-4.1)
-    return prisma.$transaction(async (tx) => {
+    return this.db.$transaction(async (tx) => {
+      // Lock shift to prevent races
+      if ('$queryRaw' in tx && typeof tx.$queryRaw === 'function') {
+        await tx.$queryRaw(
+          Prisma.sql`SELECT id, status, cashier_id, branch_id FROM cash_shifts WHERE id = ${validated.cashShiftId} FOR UPDATE`
+        );
+      }
       // Record Payments
       for (const p of resolvedPayments) {
         await tx.orderPayment.create({

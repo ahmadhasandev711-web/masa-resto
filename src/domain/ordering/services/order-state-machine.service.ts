@@ -1,4 +1,4 @@
-import { OrderStatus } from '../enums';
+import { OrderStatus, OrderType } from '../enums';
 import { ValidationError } from '../../shared/errors/domain-error';
 
 export interface TransitionValidationParams {
@@ -7,6 +7,7 @@ export interface TransitionValidationParams {
   branchId?: string | null;
   cancelReason?: string | null;
   driverId?: string | null;
+  orderType?: OrderType | string | null;
 }
 
 export class OrderStateMachineService {
@@ -17,7 +18,7 @@ export class OrderStateMachineService {
     [OrderStatus.COMPLETED]: [],
     [OrderStatus.PENDING]: [OrderStatus.CONFIRMED, OrderStatus.CANCELLED, OrderStatus.REJECTED],
     [OrderStatus.CONFIRMED]: [OrderStatus.PREPARING, OrderStatus.CANCELLED],
-    [OrderStatus.PREPARING]: [OrderStatus.READY_FOR_PICKUP, OrderStatus.CANCELLED],
+    [OrderStatus.PREPARING]: [OrderStatus.READY_FOR_PICKUP, OrderStatus.COMPLETED, OrderStatus.CANCELLED],
     [OrderStatus.READY_FOR_PICKUP]: [OrderStatus.OUT_FOR_DELIVERY, OrderStatus.CANCELLED],
     [OrderStatus.OUT_FOR_DELIVERY]: [OrderStatus.DELIVERED, OrderStatus.CANCELLED],
     [OrderStatus.DELIVERED]: [],

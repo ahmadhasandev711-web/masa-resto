@@ -6,6 +6,7 @@ import { UpdateSettingsDto } from '../../application/settings/dto/settings.dto';
 import { ActionResult, toActionFailure } from './action-result';
 import { SessionService } from '../../infrastructure/auth/session.service';
 import { PermissionCode } from '../../domain/staff/enums/permission.enum';
+import { assertDemoAllows } from '../../infrastructure/demo/demo-policy';
 
 export type SettingsActionResultData = {
   id: string;
@@ -22,6 +23,7 @@ export type SettingsActionResultData = {
 
 export async function updateSettingsAction(formData: UpdateSettingsDto): Promise<ActionResult<SettingsActionResultData>> {
   try {
+    assertDemoAllows('settings');
     await SessionService.requirePermission(PermissionCode.MANAGE_SETTINGS);
     const useCase = new UpdateSettingsUseCase();
     const settings = await useCase.execute(formData);

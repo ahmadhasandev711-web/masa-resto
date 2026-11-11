@@ -1,6 +1,8 @@
 import { prisma } from '../../../infrastructure/db/prisma';
+import type { PrismaClient } from '@prisma/client';
 import { NotFoundError, ValidationError } from '../../../domain/shared/errors/domain-error';
 import { TableStatus } from '../../../domain/tables/enums';
+import { TableStateMachine } from '../../../domain/tables/services/table-state-machine';
 import {
   CreateTableDto,
   createTableSchema,

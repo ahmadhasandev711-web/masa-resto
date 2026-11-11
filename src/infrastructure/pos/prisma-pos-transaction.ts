@@ -31,17 +31,39 @@ export class PrismaPosTransaction implements PosTransaction {
   public async getSettings(): Promise<PosSettings> {
     const setting = await this.client.restaurantSetting.findFirst();
     if (!setting) throw new NotFoundError('إعدادات المطعم');
-    return { nameAr: setting.nameAr, nameEn: setting.nameEn, currency: setting.currency, locale: setting.locale, taxRatePercent: setting.taxRatePercent.toString() };
+    return {
+      nameAr: setting.nameAr,
+      nameEn: setting.nameEn,
+      currency: setting.currency,
+      locale: setting.locale,
+      taxRatePercent: setting.taxRatePercent.toString(),
+      pricesIncludeTax: setting.pricesIncludeTax,
+      serviceChargePercent: setting.serviceChargePercent.toString(),
+      maxCashierDiscountPercent: setting.maxCashierDiscountPercent.toString(),
+    };
   }
 
   public async getProducts(branchId: string, ids: string[]): Promise<PosProduct[]> {
     const products = await this.client.product.findMany({
-      where: { id: { in: ids }, isActive: true, category: { isActive: true },
-        NOT: { branchAvailability: { some: { branchId, isAvailable: false } } } },
-      include: { sizes: { where: { isActive: true }, orderBy: { sortOrder: 'asc' } },
-        modifierGroups: { where: { group: { isActive: true } }, include: { group: { include: { modifiers: { where: { isActive: true } } } } } } },
+      where: {
+        id: { in: ids },
+        isActive: true,
+        deletedAt: null,
+        category: { isActive: true, deletedAt: null },
+        NOT: { branchAvailability: { some: { branchId, isAvailable: false } } },
+      },
+      include: {
+        sizes: { where: { isActive: true }, orderBy: { sortOrder: 'asc' } },
+        modifierGroups: {
+          where: { group: { isActive: true } },
+          include: { group: { include: { modifiers: { where: { isActive: true } } } } },
+        },
+      },
     });
-    return products.map((product) => ({ ...product, modifierGroups: product.modifierGroups.map(({ group }) => group) }));
+    return products.map((product) => ({
+      ...product,
+      modifierGroups: product.modifierGroups.map(({ group }) => group),
+    }));
   }
 
   public async saveSale(request: PosRequest, scope: PosScope, settings: PosSettings, totals: PosTotals, lines: PosResolvedLine[]): Promise<PosReceipt> {

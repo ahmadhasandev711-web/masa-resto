@@ -28,6 +28,26 @@ export class RbacGuard {
   /**
    * Checks if user has permission without throwing an exception.
    */
+  
+  public static assertAnyPermission(
+    session: UserSessionContext | null | undefined,
+    permissions: PermissionCode[],
+    deniedMessage?: string
+  ): void {
+    if (!session) {
+      throw new UnauthorizedError();
+    }
+    if (session.isSuperAdmin) {
+      return;
+    }
+    const hasAny = permissions.some((p) => session.permissions.includes(p));
+    if (!hasAny) {
+      throw new ForbiddenError(
+        deniedMessage || 'User does not possess any of the required permissions'
+      );
+    }
+  }
+
   public static hasPermission(
     session: UserSessionContext | null | undefined,
     permission: PermissionCode

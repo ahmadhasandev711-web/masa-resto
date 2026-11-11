@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { PermissionCode } from '../../domain/staff/enums/permission.enum';
 import { SessionService } from '../../infrastructure/auth/session.service';
+import { BranchContextService } from '../../infrastructure/auth/branch-context.service';
 import { prisma } from '../../infrastructure/db/prisma';
 import {
   PlaceOnlineOrderDto,
@@ -34,7 +35,7 @@ async function getClientIp(): Promise<string> {
   }
 }
 
-export async function placeOnlineOrderAction(input: PlaceOnlineOrderDto): Promise<ActionResult<{ orderNumber: string }>> {
+export async function placeOnlineOrderAction(input: PlaceOnlineOrderDto): Promise<ActionResult<{ orderNumber: string; trackingToken: string }>> {
   try {
     const ip = await getClientIp();
     const rateCheck = RateLimiter.check(
@@ -47,7 +48,7 @@ export async function placeOnlineOrderAction(input: PlaceOnlineOrderDto): Promis
     }
 
     const order = await new PlaceOnlineOrderUseCase().execute(input);
-    return { success: true, data: { orderNumber: order.orderNumber } };
+    return { success: true, data: { orderNumber: order.orderNumber, trackingToken: order.trackingToken } };
   } catch (error) {
     return toActionFailure(error);
   }

@@ -43,6 +43,3 @@ next-env.d.ts
 # local artifacts & analysis
 analysis.json
 artifacts/
-pnpm-lock.yaml
-tests/
-vitest.config.ts

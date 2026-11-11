@@ -89,7 +89,7 @@ export async function createExpenseAction(
     const currency = settings?.currency ?? 'EGP';
 
     const useCase = new CreateExpenseUseCase(financeRepo);
-    const result = await useCase.execute(dto, session.userId, currency);
+    const result = await useCase.execute(dto, session.userId, currency, session.userId);
 
     revalidatePath('/admin/finance');
     return { success: true, data: result };
@@ -104,10 +104,10 @@ export async function getShiftDetailsAction(
 ): Promise<ActionResult<CashShiftDetail | null>> {
   try {
     const session = await SessionService.requirePermission(PermissionCode.MANAGE_FINANCE);
-    const canManageAll = session.isSuperAdmin || session.permissions.includes(PermissionCode.MANAGE_BRANCHES);
+    const scope = BranchContextService.resolveScope(session);
 
     let targetBranchId = branchId;
-    if (!canManageAll) {
+    if (scope.allowedBranchIds !== 'ALL') {
       targetBranchId = await BranchContextService.assertBranchAccess(session, branchId);
     } else if (branchId) {
       await BranchContextService.assertBranchAccess(session, branchId);
@@ -116,7 +116,7 @@ export async function getShiftDetailsAction(
     const useCase = new GetCashShiftDetailsUseCase(financeRepo);
     const result = await useCase.execute(shiftId, targetBranchId);
 
-    if (result && !canManageAll && !session.assignedBranchIds.includes(result.branchId)) {
+    if (result && scope.allowedBranchIds !== 'ALL' && !scope.allowedBranchIds.includes(result.branchId)) {
       throw new ForbiddenError('غير مصرح لك باستعراض وردية تابعة لفرع آخر');
     }
 

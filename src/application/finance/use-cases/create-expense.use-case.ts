@@ -7,7 +7,8 @@ export class CreateExpenseUseCase {
   public async execute(
     dto: CreateExpenseDto,
     spentById: string,
-    currency: string
+    currency: string,
+    approvedById?: string
   ): Promise<ExpenseListItem> {
     const validated = CreateExpenseSchema.parse(dto);
 
@@ -21,6 +22,7 @@ export class CreateExpenseUseCase {
       receiptNumber: validated.receiptNumber || undefined,
       spentById,
       cashShiftId: validated.cashShiftId || undefined,
+      approvedById,
     });
   }
 }

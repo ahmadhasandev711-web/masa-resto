@@ -2,8 +2,9 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../db/prisma';
 import { PosRepository, PosScope, PosShift, PosShiftClose, PosTransaction } from '../../domain/pos/contracts/pos.repository';
 import { CashShiftStatus } from '../../domain/pos/enums';
-import { ConflictError } from '../../domain/shared/errors/domain-error';
+import { ConflictError, ValidationError } from '../../domain/shared/errors/domain-error';
 import { Money } from '../../domain/shared/value-objects/money';
+import { CashShiftCalculatorService } from '../../domain/finance/services/cash-shift-calculator.service';
 import { OrderSource, PaymentMethod } from '../../domain/ordering/enums';
 import { PrismaPosTransaction } from './prisma-pos-transaction';
 import { mapPosReceipt, posReceiptInclude } from './prisma-pos.mapper';
@@ -17,7 +18,7 @@ export class PrismaPosRepository implements PosRepository {
     const shift = await prisma.cashShift.findFirst({ where: { cashierId, status: CashShiftStatus.OPEN }, orderBy: { openedAt: 'desc' } });
     if (!shift) return null;
     const settings = await this.getSettings();
-    return { id: shift.id, branchId: shift.branchId, currency: shift.currency ?? settings.currency, openingCashMinor: shift.openingCashMinor, openedAt: shift.openedAt.toISOString() };
+    return { id: shift.id, branchId: shift.branchId, cashierId: shift.cashierId, currency: shift.currency ?? settings.currency, openingCashMinor: shift.openingCashMinor, openedAt: shift.openedAt.toISOString() };
   }
   public async openShift(branchId: string, cashierId: string, openingCashMinor: number): Promise<PosShift> {
     return prisma.$transaction(async (client) => {
@@ -26,33 +27,49 @@ export class PrismaPosRepository implements PosRepository {
       if (existing) throw new ConflictError('لديك وردية مفتوحة؛ أغلقها قبل فتح وردية جديدة');
       const settings = await new PrismaPosTransaction(client).getSettings();
       const shift = await client.cashShift.create({ data: { branchId, cashierId, openingCashMinor, currency: settings.currency, status: CashShiftStatus.OPEN } });
-      return { id: shift.id, branchId, currency: settings.currency, openingCashMinor, openedAt: shift.openedAt.toISOString() };
+      return { id: shift.id, branchId, cashierId, currency: settings.currency, openingCashMinor, openedAt: shift.openedAt.toISOString() };
     }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
   }
-  public async closeShift(branchId: string, cashierId: string, shiftId: string, closingCashMinor: number): Promise<PosShiftClose> {
+  public async closeShift(
+    branchId: string,
+    cashierId: string,
+    shiftId: string,
+    closingCashMinor: number,
+    clientPendingCount?: number
+  ): Promise<PosShiftClose> {
+    if (clientPendingCount !== undefined && clientPendingCount > 0) {
+      throw new ValidationError(
+        `لا يمكن إغلاق الوردية: توجد (${clientPendingCount}) عمليات بيع محلية لم تتم مزامنتها مع السيرفر بعد. يرجى المزامنة أولاً.`
+      );
+    }
     return prisma.$transaction(async (client) => {
       const transaction = new PrismaPosTransaction(client);
       await transaction.lockShift(shiftId, { branchId, cashierId, canDiscount: false }, false);
       const shift = await client.cashShift.findUniqueOrThrow({ where: { id: shiftId } });
       const settings = await transaction.getSettings();
       const [cash, movements, expenses] = await Promise.all([
-        client.orderPayment.aggregate({ where: { method: PaymentMethod.CASH, order: { cashShiftId: shiftId, source: OrderSource.POS } }, _sum: { amountMinor: true } }),
+        client.orderPayment.aggregate({ where: { method: PaymentMethod.CASH, order: { cashShiftId: shiftId } }, _sum: { amountMinor: true } }),
         client.cashShiftMovement.findMany({ where: { cashShiftId: shiftId } }),
         client.expense.aggregate({ where: { cashShiftId: shiftId }, _sum: { amountMinor: true } }),
       ]);
       const currency = shift.currency ?? settings.currency;
       let cashInMinor = 0;
       let cashDropMinor = 0;
+      let cashRefundMinor = 0;
       for (const m of movements) {
         if (m.type === 'CASH_IN') cashInMinor += m.amountMinor;
         else if (m.type === 'CASH_DROP') cashDropMinor += m.amountMinor;
+        else if (m.type === 'CASH_REFUND') cashRefundMinor += m.amountMinor;
       }
       const registerExpensesMinor = expenses._sum.amountMinor ?? 0;
-      const expected = Money.fromMinor(shift.openingCashMinor, currency)
-        .add(Money.fromMinor(cash._sum.amountMinor ?? 0, currency))
-        .add(Money.fromMinor(cashInMinor, currency))
-        .subtract(Money.fromMinor(cashDropMinor, currency))
-        .subtract(Money.fromMinor(registerExpensesMinor, currency));
+      const expected = CashShiftCalculatorService.calculateExpectedCash({
+        openingCash: Money.fromMinor(shift.openingCashMinor, currency),
+        cashSales: Money.fromMinor(cash._sum.amountMinor ?? 0, currency),
+        cashInTotal: Money.fromMinor(cashInMinor, currency),
+        cashDropTotal: Money.fromMinor(cashDropMinor, currency),
+        registerExpensesTotal: Money.fromMinor(registerExpensesMinor, currency),
+        cashRefundsTotal: Money.fromMinor(cashRefundMinor, currency),
+      });
       const counted = Money.fromMinor(closingCashMinor, currency);
       const variance = counted.subtract(expected);
       await client.cashShift.update({

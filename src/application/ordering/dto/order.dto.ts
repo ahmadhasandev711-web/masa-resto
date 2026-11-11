@@ -20,6 +20,7 @@ export const placeOnlineOrderSchema = z.object({
   deliveryNotes: z.string().nullable().optional(),
   customerNotes: z.string().nullable().optional(),
   idempotencyKey: z.string().uuid().optional(),
+  branchId: z.string().uuid().optional().nullable(),
   items: z.array(placeOnlineOrderItemSchema).min(1, 'يجب اختيار صنف واحد على الأقل في السلة'),
 });
 
@@ -29,6 +30,7 @@ export type PlaceOnlineOrderDto = z.infer<typeof placeOnlineOrderSchema>;
 export const listOrdersQuerySchema = z.object({
   status: z.string().optional(),
   branchId: z.string().optional(),
+  allowedBranchIds: z.array(z.string()).optional(),
   source: z.string().optional(),
   type: z.string().optional(),
   paymentStatus: z.string().optional(),

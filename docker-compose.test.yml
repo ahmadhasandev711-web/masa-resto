@@ -1,0 +1,16 @@
+services:
+  resto_test_db:
+    image: mysql:8.0
+    container_name: resto_test_db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: resto_test
+    ports:
+      - "3306:3306"
+    command: --default-authentication-plugin=mysql_native_password --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - resto_test_data:/var/lib/mysql
+
+volumes:
+  resto_test_data:

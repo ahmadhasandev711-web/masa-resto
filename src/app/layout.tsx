@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from 'next';
 import { Cairo } from 'next/font/google';
 import './globals.css';
 import { PwaRegister } from './pwa-register';
+import { DemoBanner } from './demo-banner';
+import { isDemoMode } from '../infrastructure/demo/demo-policy';
 
 const cairo = Cairo({
   subsets: ['arabic', 'latin'],

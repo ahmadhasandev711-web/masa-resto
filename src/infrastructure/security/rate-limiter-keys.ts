@@ -6,6 +6,7 @@ export const RateLimiterKeys = {
   ORDER_TRACKER: (ip: string) => `tracker:${ip}`,
   CHECKOUT: (ip: string) => `checkout:${ip}`,
   LOGIN: (identifier: string) => `login:${identifier}`,
+  LOGIN_IP: (ip: string) => `login_ip:${ip}`,
 } as const;
 
 export interface RateLimitPolicy {
@@ -24,6 +25,10 @@ export const RateLimitPolicies = {
   },
   LOGIN: {
     limit: 5, // 5 login attempts per 15 minutes
+    windowMs: 15 * 60 * 1000,
+  },
+  LOGIN_IP: {
+    limit: 20, // 20 login attempts per 15 minutes
     windowMs: 15 * 60 * 1000,
   },
 } as const;

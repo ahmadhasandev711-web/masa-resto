@@ -29,10 +29,10 @@ export async function getSalesAnalyticsAction(input: {
 }): Promise<ActionResult<SalesAnalyticsResult>> {
   try {
     const session = await SessionService.requirePermission(PermissionCode.VIEW_REPORTS);
-    const canManageAll = session.isSuperAdmin || session.permissions.includes(PermissionCode.MANAGE_BRANCHES);
+    const scope = BranchContextService.resolveScope(session);
 
     let targetBranchId = input.branchId;
-    if (!canManageAll) {
+    if (scope.allowedBranchIds !== 'ALL') {
       targetBranchId = await BranchContextService.assertBranchAccess(session, input.branchId);
     } else if (input.branchId) {
       await BranchContextService.assertBranchAccess(session, input.branchId);
@@ -58,10 +58,10 @@ export async function getMenuEngineeringAction(input: {
 }): Promise<ActionResult<MenuEngineeringResult>> {
   try {
     const session = await SessionService.requirePermission(PermissionCode.VIEW_REPORTS);
-    const canManageAll = session.isSuperAdmin || session.permissions.includes(PermissionCode.MANAGE_BRANCHES);
+    const scope = BranchContextService.resolveScope(session);
 
     let targetBranchId = input.branchId;
-    if (!canManageAll) {
+    if (scope.allowedBranchIds !== 'ALL') {
       targetBranchId = await BranchContextService.assertBranchAccess(session, input.branchId);
     } else if (input.branchId) {
       await BranchContextService.assertBranchAccess(session, input.branchId);
@@ -86,8 +86,8 @@ export async function getBranchPerformanceAction(input: {
 }): Promise<ActionResult<BranchPerformanceResult>> {
   try {
     const session = await SessionService.requirePermission(PermissionCode.VIEW_REPORTS);
-    const canManageAll = session.isSuperAdmin || session.permissions.includes(PermissionCode.MANAGE_BRANCHES);
-    if (!canManageAll) {
+    const scope = BranchContextService.resolveScope(session);
+    if (scope.allowedBranchIds !== 'ALL') {
       throw new ForbiddenError('تقرير مقارنة أداء الفروع متاح فقط للإدارة المركزية');
     }
 
@@ -110,10 +110,10 @@ export async function getInventoryAnalyticsAction(input: {
 }): Promise<ActionResult<InventoryAnalyticsResult>> {
   try {
     const session = await SessionService.requirePermission(PermissionCode.VIEW_REPORTS);
-    const canManageAll = session.isSuperAdmin || session.permissions.includes(PermissionCode.MANAGE_BRANCHES);
+    const scope = BranchContextService.resolveScope(session);
 
     let targetBranchId = input.branchId;
-    if (!canManageAll) {
+    if (scope.allowedBranchIds !== 'ALL') {
       targetBranchId = await BranchContextService.assertBranchAccess(session, input.branchId);
     } else if (input.branchId) {
       await BranchContextService.assertBranchAccess(session, input.branchId);

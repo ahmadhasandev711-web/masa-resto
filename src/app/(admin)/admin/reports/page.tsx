@@ -1,6 +1,7 @@
 import { Metadata } from 'next';
 import { prisma } from '../../../../infrastructure/db/prisma';
 import { assertPagePermission } from '../../../../infrastructure/auth/page-guard';
+import { BranchContextService } from '../../../../infrastructure/auth/branch-context.service';
 import { PermissionCode } from '../../../../domain/staff/enums/permission.enum';
 import { GetSalesAnalyticsUseCase } from '../../../../application/reports/use-cases/get-sales-analytics.use-case';
 import { GetMenuEngineeringUseCase } from '../../../../application/reports/use-cases/get-menu-engineering.use-case';
@@ -18,17 +19,17 @@ export const dynamic = 'force-dynamic';
 export default async function ReportsPage() {
   const session = await assertPagePermission(PermissionCode.VIEW_REPORTS);
 
-  const canManageAllBranches =
-    session.isSuperAdmin || session.permissions.includes(PermissionCode.MANAGE_BRANCHES);
-  const isBranchScoped = !canManageAllBranches;
-  const defaultBranchId = isBranchScoped ? (session.assignedBranchIds[0] ?? undefined) : undefined;
+  const scope = BranchContextService.resolveScope(session);
+  const isBranchScoped = scope.allowedBranchIds !== 'ALL';
+  const assignedBranches = scope.allowedBranchIds === 'ALL' ? null : scope.allowedBranchIds;
+  const defaultBranchId = assignedBranches ? (assignedBranches[0] ?? undefined) : undefined;
 
   const [settings, branches] = await Promise.all([
     prisma.restaurantSetting.findFirst(),
     prisma.branch.findMany({
       where: {
         isActive: true,
-        ...(canManageAllBranches ? {} : { id: { in: session.assignedBranchIds } }),
+        ...(assignedBranches ? { id: { in: assignedBranches } } : {}),
       },
       select: { id: true, code: true, nameAr: true },
       orderBy: { createdAt: 'asc' },

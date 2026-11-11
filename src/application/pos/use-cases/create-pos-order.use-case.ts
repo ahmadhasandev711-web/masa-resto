@@ -18,9 +18,28 @@ export class CreatePosOrderUseCase {
       const settings = await transaction.getSettings();
       const products = await transaction.getProducts(scope.branchId, request.items.map((item) => item.productId));
       const lines = request.items.map((item) => PosSaleService.resolveLine(item, products, settings.currency));
-      const totals = PosSaleService.price(lines, settings, request.discountMinor);
+      const totals = PosSaleService.price(lines, settings, request.discountMinor, request.type);
       PosSaleService.assertPayments(request, totals, settings.currency);
-      return transaction.saveSale(request, scope, settings, totals, lines);
+
+      try {
+        return await transaction.saveSale(request, scope, settings, totals, lines);
+      } catch (err: unknown) {
+        const errorObj = err as { code?: string; message?: string; meta?: { target?: unknown } };
+        if (
+          errorObj &&
+          (errorObj.code === 'P2002' ||
+            String(errorObj.meta?.target).includes('pos_idempotency_key') ||
+            String(errorObj.meta?.target).includes('posIdempotencyKey') ||
+            errorObj.message?.includes('pos_idempotency_key'))
+        ) {
+          const concurrentP2002Replay = await transaction.findReplay(request.idempotencyKey);
+          if (concurrentP2002Replay) {
+            PosSaleService.assertReplay(concurrentP2002Replay, request, scope);
+            return concurrentP2002Replay;
+          }
+        }
+        throw err;
+      }
     });
   }
 }

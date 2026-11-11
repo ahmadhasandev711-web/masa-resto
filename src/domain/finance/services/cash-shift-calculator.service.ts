@@ -11,7 +11,7 @@ export interface ShiftVarianceAnalysis {
 export class CashShiftCalculatorService {
   /**
    * Calculates the exact expected physical cash inside the register drawer (GR-1.1).
-   * Formula: Opening Cash + POS Cash Sales + Cash In - Cash Drops - Drawer Expenses
+   * Formula: Opening Cash + POS Cash Sales + Cash In - Cash Drops - Drawer Expenses - Cash Refunds
    */
   public static calculateExpectedCash(params: {
     openingCash: Money;
@@ -19,15 +19,18 @@ export class CashShiftCalculatorService {
     cashInTotal: Money;
     cashDropTotal: Money;
     registerExpensesTotal: Money;
+    cashRefundsTotal?: Money;
   }): Money {
-    const { openingCash, cashSales, cashInTotal, cashDropTotal, registerExpensesTotal } = params;
+    const { openingCash, cashSales, cashInTotal, cashDropTotal, registerExpensesTotal, cashRefundsTotal } = params;
+    const refunds = cashRefundsTotal ?? Money.zero(openingCash.currency);
 
     // Currency consistency check is handled inside Money operations
     return openingCash
       .add(cashSales)
       .add(cashInTotal)
       .subtract(cashDropTotal)
-      .subtract(registerExpensesTotal);
+      .subtract(registerExpensesTotal)
+      .subtract(refunds);
   }
 
   /**

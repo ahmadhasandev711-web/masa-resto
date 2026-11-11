@@ -16,6 +16,7 @@ import {
 } from '../../domain/inventory/enums';
 import { NotFoundError, ValidationError } from '../../domain/shared/errors/domain-error';
 import { Money } from '../../domain/shared/value-objects/money';
+import { DocumentSequenceService } from '../../domain/ordering/services/document-sequence.service';
 
 export class PrismaInventoryRepository {
   constructor(private readonly db = defaultPrisma) {}
@@ -415,7 +416,7 @@ export class PrismaInventoryRepository {
         };
       });
 
-      const orderNumber = `PO-${Date.now().toString().slice(-6)}-${Math.floor(100 + Math.random() * 900)}`;
+      const orderNumber = await DocumentSequenceService.getNextPurchaseOrderNumber(tx);
 
       const order = await tx.purchaseOrder.create({
         data: {

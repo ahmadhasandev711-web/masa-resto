@@ -1,5 +1,7 @@
 import { prisma } from '../../../infrastructure/db/prisma';
-import { NotFoundError, ValidationError } from '../../../domain/shared/errors/domain-error';
+import type { PrismaClient } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import { NotFoundError, ValidationError, ForbiddenError } from '../../../domain/shared/errors/domain-error';
 import { TableStatus } from '../../../domain/tables/enums';
 import { OrderStatus, OrderSource, OrderType, PaymentStatus, PaymentMethod } from '../../../domain/ordering/enums';
 import { Money } from '../../../domain/shared/value-objects/money';
@@ -20,11 +22,13 @@ interface ResolvedTabItemData {
 }
 
 export class OpenTableTabUseCase {
+  constructor(private readonly db: PrismaClient = prisma) {}
+
   public async execute(input: OpenTableTabDto) {
     const validated = openTableTabSchema.parse(input);
 
     // 1. Verify table status
-    const table = await prisma.diningTable.findUnique({
+    const table = await this.db.diningTable.findUnique({
       where: { id: validated.tableId },
     });
 
@@ -41,24 +45,32 @@ export class OpenTableTabUseCase {
     }
 
     // 2. Verify Cash Shift
-    const shift = await prisma.cashShift.findUnique({
+    const shift = await this.db.cashShift.findUnique({
       where: { id: validated.cashShiftId },
     });
     if (!shift || shift.status !== 'OPEN') {
       throw new ValidationError('وردية الكاشير غير مفتوحة');
     }
+    if (validated.cashierId && shift.cashierId !== validated.cashierId) {
+      throw new ForbiddenError('الوردية المحددة لا تخص الكاشير الحالي');
+    }
+    if (shift.branchId !== table.branchId) {
+      throw new ValidationError('الوردية لا تتبع نفس فرع الطاولة');
+    }
 
     // 3. Get restaurant settings for tax and currency
-    const setting = await prisma.restaurantSetting.findFirst();
+    const setting = await this.db.restaurantSetting.findFirst();
     const currency = setting?.currency ?? 'EGP';
     const taxRatePercent = Number(setting?.taxRatePercent ?? 14);
+    const serviceChargePercent = Number(setting?.serviceChargePercent ?? 0);
+    const pricesIncludeTax = Boolean(setting?.pricesIncludeTax);
 
     // 4. Resolve initial items if any
     const pricingItems: PricingItemInput[] = [];
     const resolvedItemsData: ResolvedTabItemData[] = [];
 
     for (const itemInput of validated.items) {
-      const product = await prisma.product.findUnique({
+      const product = await this.db.product.findUnique({
         where: { id: itemInput.productId },
         include: {
           sizes: { where: { id: itemInput.sizeId, isActive: true } },
@@ -113,17 +125,33 @@ export class OpenTableTabUseCase {
     const zeroMoney = Money.fromMinor(0, currency);
     const pricing =
       pricingItems.length > 0
-        ? OrderPricingService.calculate(pricingItems, zeroMoney, taxRatePercent)
+        ? OrderPricingService.calculateDetailed({
+            items: pricingItems,
+            deliveryFee: zeroMoney,
+            taxRatePercent,
+            discount: zeroMoney,
+            isDineIn: true,
+            serviceChargePercent,
+            pricesIncludeTax,
+          })
         : {
             subtotal: zeroMoney,
             deliveryFee: zeroMoney,
+            service: zeroMoney,
             tax: zeroMoney,
             total: zeroMoney,
             discount: zeroMoney,
           };
 
     // 5. Atomic Transaction: Create Order & Update Table
-    return prisma.$transaction(async (tx) => {
+    return this.db.$transaction(async (tx) => {
+      // 5.0. Lock shift to ensure active state and prevent concurrency races
+      if ('$queryRaw' in tx && typeof tx.$queryRaw === 'function') {
+        await tx.$queryRaw(
+          Prisma.sql`SELECT id, status, cashier_id, branch_id FROM cash_shifts WHERE id = ${validated.cashShiftId} FOR UPDATE`
+        );
+      }
+
       // 5.1. Generate sequential human-friendly order number
       const orderNumber = await OrderNumberService.getNextOrderNumber(tx);
 
@@ -151,6 +179,7 @@ export class OpenTableTabUseCase {
           deliveryFeeMinor: 0,
           taxRatePercent,
           taxMinor: pricing.tax.amount,
+          serviceMinor: pricing.service.amount,
           discountMinor: 0,
           totalMinor: pricing.total.amount,
           tableId: table.id,

@@ -9,12 +9,14 @@ import { CreateStaffDto, UpdateStaffDto, ResetStaffPasswordDto } from '../../app
 import { ActionResult, toActionFailure } from './action-result';
 import { SessionService } from '../../infrastructure/auth/session.service';
 import { PermissionCode } from '../../domain/staff/enums/permission.enum';
+import { assertDemoAllows } from '../../infrastructure/demo/demo-policy';
 
 export async function createStaffAction(formData: CreateStaffDto): Promise<ActionResult<{ id: string; username: string }>> {
   try {
-    await SessionService.requirePermission(PermissionCode.MANAGE_STAFF);
+    assertDemoAllows('staff');
+    const session = await SessionService.requirePermission(PermissionCode.MANAGE_STAFF);
     const useCase = new CreateStaffUseCase();
-    const staff = await useCase.execute(formData);
+    const staff = await useCase.execute(formData, session);
     revalidatePath('/admin/staff');
     return { success: true, data: { id: staff.id, username: staff.username } };
   } catch (error) {
@@ -24,9 +26,10 @@ export async function createStaffAction(formData: CreateStaffDto): Promise<Actio
 
 export async function updateStaffAction(formData: UpdateStaffDto): Promise<ActionResult<Awaited<ReturnType<UpdateStaffUseCase['execute']>>>> {
   try {
-    await SessionService.requirePermission(PermissionCode.MANAGE_STAFF);
+    assertDemoAllows('staff');
+    const session = await SessionService.requirePermission(PermissionCode.MANAGE_STAFF);
     const useCase = new UpdateStaffUseCase();
-    const updated = await useCase.execute(formData);
+    const updated = await useCase.execute(formData, session);
     revalidatePath('/admin/staff');
     return { success: true, data: updated };
   } catch (error) {
@@ -36,9 +39,10 @@ export async function updateStaffAction(formData: UpdateStaffDto): Promise<Actio
 
 export async function resetStaffPasswordAction(formData: ResetStaffPasswordDto): Promise<ActionResult<{ id: string; username: string }>> {
   try {
-    await SessionService.requirePermission(PermissionCode.MANAGE_STAFF);
+    assertDemoAllows('staff');
+    const session = await SessionService.requirePermission(PermissionCode.MANAGE_STAFF);
     const useCase = new ResetStaffPasswordUseCase();
-    const res = await useCase.execute(formData);
+    const res = await useCase.execute(formData, session);
     revalidatePath('/admin/staff');
     return { success: true, data: res };
   } catch (error) {
@@ -48,9 +52,10 @@ export async function resetStaffPasswordAction(formData: ResetStaffPasswordDto):
 
 export async function toggleStaffStatusAction(userId: string, isActive: boolean): Promise<ActionResult<{ id: string; username: string; isActive: boolean }>> {
   try {
+    assertDemoAllows('staff');
     const session = await SessionService.requirePermission(PermissionCode.MANAGE_STAFF);
     const useCase = new ToggleStaffStatusUseCase();
-    const res = await useCase.execute(userId, isActive, session.userId);
+    const res = await useCase.execute(userId, isActive, session);
     revalidatePath('/admin/staff');
     return { success: true, data: res };
   } catch (error) {

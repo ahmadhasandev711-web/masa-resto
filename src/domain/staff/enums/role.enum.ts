@@ -38,6 +38,7 @@ export const SYSTEM_ROLES: SystemRoleDefinition[] = [
       PermissionCode.MANAGE_CUSTOMERS,
       PermissionCode.MANAGE_INVENTORY,
       PermissionCode.MANAGE_FINANCE,
+      PermissionCode.VOID_PAID_ORDER,
       PermissionCode.KITCHEN_VIEW,
       PermissionCode.KITCHEN_BUMP,
     ],

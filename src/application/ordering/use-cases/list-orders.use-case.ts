@@ -1,7 +1,7 @@
 import { prisma } from '../../../infrastructure/db/prisma';
 import { ListOrdersQueryInput, listOrdersQuerySchema } from '../dto/order.dto';
 import { Prisma } from '@prisma/client';
-import { OrderSource } from '../../../domain/ordering/enums';
+import { OrderSource, OrderStatus, OrderType, PaymentMethod, PaymentStatus } from '../../../domain/ordering/enums';
 
 export class ListOrdersUseCase {
   public async execute(input: ListOrdersQueryInput = {}) {
@@ -9,6 +9,7 @@ export class ListOrdersUseCase {
     const {
       status,
       branchId,
+      allowedBranchIds,
       source,
       type,
       paymentStatus,
@@ -27,27 +28,27 @@ export class ListOrdersUseCase {
     // Pass source: 'ALL' to retrieve orders from all sources (e.g. invoices audit)
     const effectiveSource = source === undefined ? OrderSource.ONLINE : source;
     if (effectiveSource !== 'ALL') {
-      where.source = effectiveSource;
+      where.source = effectiveSource as OrderSource;
     }
 
     // Type Filter (DINE_IN, TAKEAWAY, DELIVERY, or ALL)
     if (type && type !== 'ALL') {
-      where.type = type;
+      where.type = type as OrderType;
     }
 
     // Status Filter
     if (status && status !== 'ALL') {
-      where.status = status;
+      where.status = status as OrderStatus;
     }
 
     // Payment Status Filter
     if (paymentStatus && paymentStatus !== 'ALL') {
-      where.paymentStatus = paymentStatus;
+      where.paymentStatus = paymentStatus as PaymentStatus;
     }
 
     // Payment Method Filter
     if (paymentMethod && paymentMethod !== 'ALL') {
-      where.paymentMethod = paymentMethod;
+      where.paymentMethod = paymentMethod as PaymentMethod;
     }
 
     // Cashier Filter
@@ -75,6 +76,10 @@ export class ListOrdersUseCase {
       } else {
         where.branchId = branchId;
       }
+    } else if (allowedBranchIds && allowedBranchIds.length > 0) {
+      where.branchId = { in: allowedBranchIds };
+    } else if (allowedBranchIds && allowedBranchIds.length === 0) {
+      where.branchId = 'NONE_ASSIGNED';
     }
 
     // Text Search

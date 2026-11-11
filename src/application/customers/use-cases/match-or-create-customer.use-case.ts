@@ -6,8 +6,16 @@ import { CustomerAddress } from '../../../domain/customers/entities/customer-add
 import { CustomerMatchingService } from '../../../domain/customers/services/customer-matching.service';
 import { MatchOrCreateCustomerDto, matchOrCreateCustomerSchema } from '../dto/customer.dto';
 
+export interface MatchOrCreateCustomerOptions {
+  allowEnrichProfile?: boolean;
+}
+
 export class MatchOrCreateCustomerUseCase {
-  public async execute(input: MatchOrCreateCustomerDto, tx?: Prisma.TransactionClient) {
+  public async execute(
+    input: MatchOrCreateCustomerDto,
+    tx?: Prisma.TransactionClient,
+    options?: MatchOrCreateCustomerOptions
+  ) {
     const validated = matchOrCreateCustomerSchema.parse(input);
     const phone = PhoneNumber.fromString(validated.phone);
     const client = tx ?? prisma;
@@ -18,8 +26,8 @@ export class MatchOrCreateCustomerUseCase {
     });
 
     if (customer) {
-      // 1. Enrich name if incoming name is fuller
-      if (CustomerMatchingService.shouldEnrichName(customer.fullName, validated.fullName)) {
+      // 1. Only enrich name/email if explicitly permitted by authorized backoffice context (never on public paths)
+      if (options?.allowEnrichProfile && CustomerMatchingService.shouldEnrichName(customer.fullName, validated.fullName)) {
         customer = await client.customer.update({
           where: { id: customer.id },
           data: {

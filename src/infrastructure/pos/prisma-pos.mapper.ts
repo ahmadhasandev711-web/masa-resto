@@ -15,6 +15,7 @@ export function mapPosReceipt(order: ReceiptRecord, currency: string, locale: st
     cashierId: order.cashierId!, cashShiftId: order.cashShiftId!, idempotencyKey: order.posIdempotencyKey!,
     type: order.type, customerName: order.customerName, customerNotes: order.customerNotes,
     createdAt: order.createdAt.toISOString(), currency: order.currency ?? currency, locale, subtotalMinor: order.subtotalMinor, taxMinor: order.taxMinor,
+    serviceMinor: order.serviceMinor,
     discountMinor: order.discountMinor, totalMinor: order.totalMinor,
     items: order.items.map((item) => ({ productId: item.productId, sizeId: item.sizeId!, productNameAr: item.productNameAr,
       productNameEn: item.productNameEn, sizeNameAr: item.sizeNameAr ?? '', sizeNameEn: item.sizeNameEn ?? '',

@@ -6,6 +6,99 @@ generator client {
   provider = "prisma-client-js"
 }
 
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PREPARING
+  READY_FOR_PICKUP
+  OUT_FOR_DELIVERY
+  DELIVERED
+  COMPLETED
+  CANCELLED
+  REJECTED
+}
+
+enum OrderSource {
+  ONLINE
+  POS
+}
+
+enum OrderType {
+  DELIVERY
+  DINE_IN
+  TAKEAWAY
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  PARTIALLY_PAID
+  FAILED
+  REFUNDED
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  ONLINE
+  MIXED
+}
+
+enum TableStatus {
+  AVAILABLE
+  OCCUPIED
+  BILL_PRINTED
+  RESERVED
+  CLEANING
+}
+
+enum DriverStatus {
+  AVAILABLE
+  ON_DELIVERY
+  INACTIVE
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+}
+
+enum CashShiftStatus {
+  OPEN
+  CLOSED
+  AUDITED
+}
+
+enum PurchaseOrderStatus {
+  DRAFT
+  RECEIVED
+  CANCELLED
+}
+
+enum InventoryMovementType {
+  SALE_POS
+  SALE_ONLINE
+  PURCHASE
+  OPERATIONAL_CONSUMPTION
+  WASTE
+  ADJUSTMENT
+}
+
+enum CashMovementType {
+  CASH_IN
+  CASH_DROP
+  CASH_REFUND
+}
+
+enum OfflineReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+
 // -------------------------------------------------------------
 // 1. Restaurant Core & Global Settings
 // -------------------------------------------------------------
@@ -17,7 +110,11 @@ model RestaurantSetting {
   currencySymbol  String   @default("ج.م") @map("currency_symbol")
   locale          String   @default("ar-EG")
   taxRatePercent  Decimal  @default(14.00) @map("tax_rate_percent") @db.Decimal(5, 2)
+  pricesIncludeTax Boolean @default(false) @map("prices_include_tax")
+  serviceChargePercent Decimal @default(0.00) @map("service_charge_percent") @db.Decimal(5, 2)
+  maxCashierDiscountPercent Decimal @default(20.00) @map("max_cashier_discount_percent") @db.Decimal(5, 2)
   deliveryFee     Int      @default(0)     @map("delivery_fee") // Minor units (e.g. 1500 = 15.00)
+  catalogVersion  Int      @default(1)     @map("catalog_version")
   phone           String?
   address         String?
   createdAt       DateTime @default(now()) @map("created_at")
@@ -37,6 +134,10 @@ model Branch {
   phone     String
   address   String
   isActive  Boolean  @default(true) @map("is_active")
+  deletedAt   DateTime? @map("deleted_at")
+  deletedById String?   @map("deleted_by_id")
+  createdById String?   @map("created_by_id")
+  updatedById String?   @map("updated_by_id")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt      @map("updated_at")
 
@@ -45,6 +146,7 @@ model Branch {
   cashShifts   CashShift[]
   productAvailability BranchProductAvailability[]
   orders Order[]
+  returnInvoices ReturnInvoice[]
   branchInventories BranchInventory[]
   inventoryMovements InventoryMovement[]
   purchaseOrders PurchaseOrder[]
@@ -85,11 +187,15 @@ model DiningTable {
   sectionId     String?   @map("section_id")
   tableNumber   String    @map("table_number") // e.g. "T-01", "12"
   capacity      Int       @default(4)
-  status        String    @default("AVAILABLE") // AVAILABLE | OCCUPIED | BILL_PRINTED | RESERVED | CLEANING
+  status        TableStatus @default(AVAILABLE)
   activeOrderId String?   @map("active_order_id")
   shape         String    @default("SQUARE") // SQUARE | ROUND | RECTANGLE
   sortOrder     Int       @default(0) @map("sort_order")
   isActive      Boolean   @default(true) @map("is_active")
+  deletedAt   DateTime? @map("deleted_at")
+  deletedById String?   @map("deleted_by_id")
+  createdById String?   @map("created_by_id")
+  updatedById String?   @map("updated_by_id")
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt      @map("updated_at")
 
@@ -100,6 +206,7 @@ model DiningTable {
   @@unique([branchId, tableNumber])
   @@index([branchId, status])
   @@index([branchId, sectionId])
+  @@index([deletedAt])
   @@map("dining_tables")
 }
 
@@ -113,7 +220,7 @@ model DeliveryDriver {
   phone        String
   vehicleType  String   @default("MOTORCYCLE") @map("vehicle_type") // MOTORCYCLE | CAR | BICYCLE
   licensePlate String?  @map("license_plate")
-  status       String   @default("AVAILABLE") // AVAILABLE | ON_DELIVERY | INACTIVE
+  status       DriverStatus @default(AVAILABLE)
   isActive     Boolean  @default(true) @map("is_active")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt      @map("updated_at")
@@ -162,7 +269,7 @@ model EventBooking {
   guestsCount   Int      @map("guests_count")
   eventDate     DateTime @map("event_date")
   branchId      String   @map("branch_id")
-  status        String   @default("PENDING") // PENDING | CONFIRMED | COMPLETED | CANCELLED
+  status        BookingStatus @default(PENDING)
   notes         String?  @db.Text
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt      @map("updated_at")
@@ -184,6 +291,10 @@ model Category {
   description String?  @db.Text
   sortOrder   Int      @default(0) @map("sort_order")
   isActive    Boolean  @default(true) @map("is_active")
+  deletedAt   DateTime? @map("deleted_at")
+  deletedById String?   @map("deleted_by_id")
+  createdById String?   @map("created_by_id")
+  updatedById String?   @map("updated_by_id")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
   products    Product[]
@@ -202,6 +313,10 @@ model Product {
   sortOrder   Int      @default(0) @map("sort_order")
   isActive    Boolean  @default(true) @map("is_active")
   isFeatured  Boolean  @default(false) @map("is_featured")
+  deletedAt   DateTime? @map("deleted_at")
+  deletedById String?   @map("deleted_by_id")
+  createdById String?   @map("created_by_id")
+  updatedById String?   @map("updated_by_id")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
   category    Category @relation(fields: [categoryId], references: [id], onDelete: Restrict)
@@ -340,6 +455,7 @@ model User {
   fullName     String   @map("full_name")
   phone        String
   passwordHash String   @map("password_hash")
+  sessionVersion Int    @default(0) @map("session_version")
   isActive     Boolean  @default(true) @map("is_active")
   roleId       String   @map("role_id")
   createdAt    DateTime @default(now()) @map("created_at")
@@ -356,6 +472,7 @@ model User {
   inventoryMovements InventoryMovement[]
   purchaseOrders     PurchaseOrder[]
   driverSettlementsReceived DriverSettlement[]  @relation("DriverSettlementsCashier")
+  returnInvoicesCreated     ReturnInvoice[]     @relation("ReturnInvoicesCreated")
 
   @@index([roleId])
   @@index([isActive])
@@ -388,6 +505,10 @@ model Customer {
   totalSpent  Int       @default(0) @map("total_spent_minor")
   lastOrderAt DateTime? @map("last_order_at")
   isActive    Boolean   @default(true) @map("is_active")
+  deletedAt   DateTime? @map("deleted_at")
+  deletedById String?   @map("deleted_by_id")
+  createdById String?   @map("created_by_id")
+  updatedById String?   @map("updated_by_id")
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
 
@@ -397,6 +518,7 @@ model Customer {
 
   @@index([fullName])
   @@index([createdAt])
+  @@index([deletedAt])
   @@map("customers")
 }
 
@@ -429,6 +551,7 @@ model CustomerAddress {
 model Order {
   id               String      @id @default(uuid())
   orderNumber      String      @unique @map("order_number") // e.g. "ORD-20260928-001"
+  offlineOrderNumber String?   @map("offline_order_number")
   customerId       String?     @map("customer_id")
   branchId         String?     @map("branch_id")
   cashierId        String?     @map("cashier_id")
@@ -436,16 +559,18 @@ model Order {
   currency         String?     @db.Char(3)
   posIdempotencyKey String?    @unique @map("pos_idempotency_key")
   onlineIdempotencyKey String?  @unique @map("online_idempotency_key")
-  source           String      @default("ONLINE") // ONLINE | POS
-  type             String      @default("DELIVERY") // DELIVERY | DINE_IN | TAKEAWAY
-  status           String      @default("PENDING") // PENDING | CONFIRMED | ...
-  paymentStatus    String      @default("PENDING") @map("payment_status")
-  paymentMethod    String      @default("CASH") @map("payment_method")
+  trackingToken    String      @unique @default(uuid()) @map("tracking_token")
+  source           OrderSource @default(ONLINE)
+  type             OrderType   @default(DELIVERY)
+  status           OrderStatus @default(PENDING)
+  paymentStatus    PaymentStatus @default(PENDING) @map("payment_status")
+  paymentMethod    PaymentMethod @default(CASH) @map("payment_method")
 
   subtotalMinor    Int         @default(0) @map("subtotal_minor")
   deliveryFeeMinor Int         @default(0) @map("delivery_fee_minor")
   taxRatePercent   Decimal     @default(0.00) @map("tax_rate_percent") @db.Decimal(5, 2)
   taxMinor         Int         @default(0) @map("tax_minor")
+  serviceMinor     Int         @default(0) @map("service_minor")
   discountMinor    Int         @default(0) @map("discount_minor")
   totalMinor       Int         @default(0) @map("total_minor")
 
@@ -470,6 +595,10 @@ model Order {
   kitchenCompletedAt DateTime? @map("kitchen_completed_at")
   kitchenNotes       String?   @map("kitchen_notes") @db.Text
 
+  deletedAt   DateTime? @map("deleted_at")
+  deletedById String?   @map("deleted_by_id")
+  createdById String?   @map("created_by_id")
+  updatedById String?   @map("updated_by_id")
   createdAt        DateTime    @default(now()) @map("created_at")
   updatedAt        DateTime    @updatedAt @map("updated_at")
 
@@ -482,6 +611,7 @@ model Order {
   driverSettlement DriverSettlement? @relation(fields: [driverSettlementId], references: [id], onDelete: SetNull)
   items            OrderItem[]
   payments         OrderPayment[]
+  returnInvoices   ReturnInvoice[]
 
   @@index([orderNumber])
   @@index([branchId, status])
@@ -498,13 +628,34 @@ model Order {
   @@map("orders")
 }
 
+model ReturnInvoice {
+  id          String   @id @default(uuid())
+  returnNumber String  @unique @map("return_number")
+  orderId     String   @map("order_id")
+  orderNumber String   @map("order_number")
+  branchId    String?  @map("branch_id")
+  amountMinor Int      @map("amount_minor")
+  reason      String   @db.Text
+  createdById String?  @map("created_by_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  branch      Branch?  @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  createdBy   User?    @relation("ReturnInvoicesCreated", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([orderId])
+  @@index([branchId, createdAt])
+  @@map("return_invoices")
+}
+
+
 // Cashier shift session with cash movements, variance calculation, and managerial audit.
 model CashShift {
   id                String    @id @default(uuid())
   branchId          String    @map("branch_id")
   cashierId         String    @map("cashier_id")
   currency          String?   @db.Char(3)
-  status            String    @default("OPEN") // OPEN | CLOSED | AUDITED
+  status            CashShiftStatus @default(OPEN)
   openingCashMinor  Int       @map("opening_cash_minor")
   closingCashMinor  Int?      @map("closing_cash_minor")
   expectedCashMinor Int?      @map("expected_cash_minor")
@@ -645,7 +796,7 @@ model InventoryMovement {
   id              String   @id @default(uuid())
   branchId        String   @map("branch_id")
   inventoryItemId String   @map("inventory_item_id")
-  type            String   // SALE_POS | PURCHASE | OPERATIONAL_CONSUMPTION | WASTE | ADJUSTMENT
+  type            InventoryMovementType
   quantityDelta   Decimal  @map("quantity_delta") @db.Decimal(10, 3)
   quantityBefore  Decimal  @map("quantity_before") @db.Decimal(10, 3)
   quantityAfter   Decimal  @map("quantity_after") @db.Decimal(10, 3)
@@ -655,9 +806,9 @@ model InventoryMovement {
   createdById     String?  @map("created_by_id")
   createdAt       DateTime @default(now()) @map("created_at")
 
-  branch          Branch        @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  inventoryItem   InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
-  createdBy       User?         @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  branch          Branch        @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  inventoryItem   InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Restrict)
+  createdBy       User?         @relation(fields: [createdById], references: [id], onDelete: Restrict)
 
   @@index([branchId, inventoryItemId, createdAt])
   @@index([type, createdAt])
@@ -688,7 +839,7 @@ model PurchaseOrder {
   orderNumber   String    @unique @map("order_number")
   supplierId    String    @map("supplier_id")
   branchId      String    @map("branch_id")
-  status        String    @default("DRAFT") // DRAFT | RECEIVED | CANCELLED
+  status        PurchaseOrderStatus @default(DRAFT)
   totalMinor    Int       @default(0) @map("total_minor")
   notes         String?   @db.Text
   invoiceNumber String?   @map("invoice_number")
@@ -730,13 +881,13 @@ model PurchaseOrderItem {
 model CashShiftMovement {
   id            String   @id @default(uuid())
   cashShiftId   String   @map("cash_shift_id")
-  type          String   // CASH_IN, CASH_DROP
+  type          CashMovementType
   amountMinor   Int      @map("amount_minor")
   reason        String   @db.Text
   performedById String   @map("performed_by_id")
   createdAt     DateTime @default(now()) @map("created_at")
 
-  cashShift     CashShift @relation(fields: [cashShiftId], references: [id], onDelete: Cascade)
+  cashShift     CashShift @relation(fields: [cashShiftId], references: [id], onDelete: Restrict)
   performedBy   User      @relation(fields: [performedById], references: [id], onDelete: Restrict)
 
   @@index([cashShiftId, type])
@@ -785,4 +936,65 @@ model Expense {
   @@index([categoryId])
   @@index([source])
   @@map("expenses")
+}
+
+// -------------------------------------------------------------
+// 12. Document Sequencing (Atomic Number Generation)
+// -------------------------------------------------------------
+model DocumentSequence {
+  key   String @id
+  value Int
+
+  @@map("document_sequences")
+}
+
+// -------------------------------------------------------------
+// 13. Offline POS Resilience & Historical Price Snapshots
+// -------------------------------------------------------------
+model CatalogPriceSnapshot {
+  id         String    @id @default(uuid())
+  version    Int
+  entityType String    @map("entity_type") // PRODUCT_SIZE, MODIFIER
+  entityId   String    @map("entity_id")
+  priceMinor Int       @map("price_minor")
+  validFrom  DateTime  @default(now()) @map("valid_from")
+  validTo    DateTime? @map("valid_to")
+
+  @@index([version])
+  @@index([entityType, entityId, validFrom, validTo])
+  @@map("catalog_price_snapshots")
+}
+
+model OfflineSaleReview {
+  id           String    @id @default(uuid())
+  orderNumber  String    @map("order_number")
+  branchId     String    @map("branch_id")
+  cashierId    String    @map("cashier_id")
+  cashShiftId  String    @map("cash_shift_id")
+  payload      Json
+  status       OfflineReviewStatus @default(PENDING)
+  reason       String    @db.Text
+  createdAt    DateTime  @default(now()) @map("created_at")
+  resolvedAt   DateTime? @map("resolved_at")
+  resolvedById String?   @map("resolved_by_id")
+
+  @@index([branchId, status])
+  @@map("offline_sale_reviews")
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  actorId   String   @map("actor_id")
+  action    String
+  entity    String
+  entityId  String   @map("entity_id")
+  before    Json?
+  after     Json?
+  branchId  String?  @map("branch_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([entity, entityId])
+  @@index([actorId, createdAt])
+  @@index([branchId, createdAt])
+  @@map("audit_logs")
 }

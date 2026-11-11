@@ -1,7 +1,7 @@
 import { prisma } from '../../../infrastructure/db/prisma';
 import { CreateEventBookingInput, CreateEventBookingSchema } from '../dto/event-booking.dto';
 import { PhoneNumber } from '../../../domain/customers/value-objects/phone-number';
-import { NotFoundError } from '../../../domain/shared/errors/domain-error';
+import { ValidationError } from '../../../domain/shared/errors/domain-error';
 import { BookingStatus } from '../../../domain/bookings/enums/booking-status.enum';
 import { MatchOrCreateCustomerUseCase } from '../../customers/use-cases/match-or-create-customer.use-case';
 
@@ -23,13 +23,13 @@ export class CreateEventBookingUseCase {
     const input = CreateEventBookingSchema.parse(rawInput);
     const normalizedPhone = PhoneNumber.fromString(input.customerPhone).value;
 
-    const branch = await prisma.branch.findUnique({
-      where: { id: input.branchId },
+    const branch = await prisma.branch.findFirst({
+      where: { id: input.branchId, isActive: true, deletedAt: null },
       select: { id: true, nameAr: true, nameEn: true, phone: true },
     });
 
     if (!branch) {
-      throw new NotFoundError('Branch', input.branchId);
+      throw new ValidationError('الفرع المختار غير متاح للحجز أو متوقف حالياً');
     }
 
     const eventDate = new Date(input.eventDate);

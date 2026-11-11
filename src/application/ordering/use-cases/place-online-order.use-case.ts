@@ -1,8 +1,8 @@
-import { Prisma } from '@prisma/client';
 import { prisma } from '../../../infrastructure/db/prisma';
 import { NotFoundError, ValidationError } from '../../../domain/shared/errors/domain-error';
 import { Money } from '../../../domain/shared/value-objects/money';
 import { OrderPricingService, PricingItemInput } from '../../../domain/ordering/services/order-pricing.service';
+import { DocumentSequenceService } from '../../../domain/ordering/services/document-sequence.service';
 import { OrderStatus, OrderSource, OrderType, PaymentStatus, PaymentMethod } from '../../../domain/ordering/enums';
 import { MatchOrCreateCustomerUseCase } from '../../customers/use-cases/match-or-create-customer.use-case';
 import { PlaceOnlineOrderDto, placeOnlineOrderSchema } from '../dto/order.dto';
@@ -48,6 +48,15 @@ export class PlaceOnlineOrderUseCase {
     const setting = await prisma.restaurantSetting.findFirst();
     if (!setting) {
       throw new NotFoundError('إعدادات المطعم غير مهيأة');
+    }
+
+    if (validated.branchId) {
+      const branch = await prisma.branch.findFirst({
+        where: { id: validated.branchId, isActive: true, deletedAt: null },
+      });
+      if (!branch) {
+        throw new ValidationError('الفرع المختار غير متاح أو متوقف حالياً');
+      }
     }
 
     const currency = setting.currency;
@@ -155,7 +164,7 @@ export class PlaceOnlineOrderUseCase {
         );
 
         // 4. Generate sequential daily order number: WEB-YYYYMMDD-NNN (atomic inside tx)
-        const orderNumber = await generateDailyWebOrderNumber(tx);
+        const orderNumber = await DocumentSequenceService.getNextWebOrderNumber(tx);
 
         const createdOrder = await tx.order.create({
           data: {
@@ -171,6 +180,7 @@ export class PlaceOnlineOrderUseCase {
             deliveryFeeMinor: pricing.deliveryFee.amount,
             taxRatePercent: setting.taxRatePercent,
             taxMinor: pricing.tax.amount,
+            serviceMinor: 0,
             discountMinor: pricing.discount.amount,
             totalMinor: pricing.total.amount,
             customerName: validated.customerName.trim(),
@@ -253,28 +263,4 @@ export class PlaceOnlineOrderUseCase {
   }
 }
 
-/**
- * Generates a clean, human-readable online order number with a daily sequential counter.
- * Format: WEB-YYYYMMDD-NNN  (e.g. WEB-20261002-001, WEB-20261002-002 …)
- *
- * Must run INSIDE a Prisma transaction with FOR UPDATE to prevent race conditions
- * when concurrent requests land on the same second.
- */
-async function generateDailyWebOrderNumber(tx: Prisma.TransactionClient): Promise<string> {
-  const now = new Date();
-  const yyyy = now.getFullYear();
-  const mm   = String(now.getMonth() + 1).padStart(2, '0');
-  const dd   = String(now.getDate()).padStart(2, '0');
-  const datePrefix = `${yyyy}${mm}${dd}`;          // e.g. 20261002
-  const pattern    = `WEB-${datePrefix}-%`;
 
-  const rows = await tx.$queryRawUnsafe<Array<{ cnt: number | bigint }>>(
-    `SELECT COUNT(*) AS cnt FROM orders WHERE order_number LIKE ? FOR UPDATE`,
-    pattern
-  );
-
-  const todayCount = rows?.[0]?.cnt ? Number(rows[0].cnt) : 0;
-  const seq        = String(todayCount + 1).padStart(3, '0'); // 001, 002 …
-
-  return `WEB-${datePrefix}-${seq}`;
-}
